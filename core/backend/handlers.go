@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -37,6 +38,7 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 	var input ArgumentInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Content == "" {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
 	}
 
 	query := `
@@ -56,6 +58,17 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
+
+	//for different ports thing
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3001")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -91,4 +104,47 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	fmt.Fprintf(w, `{"message": "User registered successfully", "id": %d}`, id)
+}
+
+type User struct {
+	Id             int
+	Email          string
+	HashedPassword string
+}
+
+func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var creds RegisterInput
+	err := json.NewDecoder(r.Body).Decode(&creds)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	}
+
+	var user User
+	query := "SELECT id, email, password_hash FROM users WHERE email = ?"
+
+	err = a.DB.QueryRow(query, creds.Email).Scan(&user.Id, &user.HashedPassword)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	} else if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	var list RegisterInput
+	IsValid := utils.CheckPassword(list.Password, user.HashedPassword)
+	if !IsValid {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Login successful!"})
 }

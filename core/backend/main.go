@@ -106,9 +106,11 @@ func main() {
 	}*/
 
 	mux := http.NewServeMux()
+
 	mux.HandleFunc("GET /api/health", app.handleHealthCheck)
 	mux.HandleFunc("POST /api/arguments", app.handleCreateArgument)
-	mux.HandleFunc("POST /api/register", app.handleRegister)
+	mux.HandleFunc("/api/register", app.handleRegister)
+	mux.HandleFunc("POST api/login", app.handleLogin)
 
 	log.Printf("Server running on port %s..\n", config.Load().Port)
 	if err := http.ListenAndServe(":"+config.Load().Port, mux); err != nil {
