@@ -21,13 +21,13 @@ func Load() *Config {
 	dsn := os.Getenv("DSN")
 
 	if dsn == "" {
-		log.Println("Warning: DB_CONN_STR not set, using default local configuration")
+		log.Println("Warning: dsn not set, using default local configuration")
 		dsn = "postgres://postgres:password@localhost:5432/your_db_name?sslmode=disable"
 	}
 
 	Port := os.Getenv("PORT")
 	if Port == "" {
-		Port = "2025"
+		Port = "2026"
 	}
 
 	return &Config{

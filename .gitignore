@@ -1,7 +1,9 @@
 .env
-core/frontend/
+core/frontend/Dashboard/
 .env*/
 todo.md
 sequence.md
 command.md
 phase.md
+
+core/frontend/.env*.local

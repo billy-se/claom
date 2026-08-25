@@ -59,11 +59,6 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 
-	//for different ports thing
-	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3001")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -82,6 +77,7 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Email == "" || input.Password == "" {
 		http.Error(w, "Email and password are required", http.StatusBadRequest)
+		return
 	}
 
 	hashedPassword, err := utils.HashPassword(input.Password)
@@ -113,6 +109,11 @@ type User struct {
 }
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -122,12 +123,13 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&creds)
 	if err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
 	}
 
 	var user User
-	query := "SELECT id, email, password_hash FROM users WHERE email = ?"
+	query := "SELECT id, email, password_hash FROM users WHERE email = $1"
 
-	err = a.DB.QueryRow(query, creds.Email).Scan(&user.Id, &user.HashedPassword)
+	err = a.DB.QueryRow(query, creds.Email).Scan(&user.Id, &user.Email, &user.HashedPassword)
 
 	if err == sql.ErrNoRows {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
@@ -137,8 +139,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var list RegisterInput
-	IsValid := utils.CheckPassword(list.Password, user.HashedPassword)
+	IsValid := utils.CheckPassword(creds.Password, user.HashedPassword)
 	if !IsValid {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
@@ -147,4 +148,19 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Login successful!"})
+}
+
+func EnableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3001")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
