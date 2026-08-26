@@ -80,6 +80,13 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	securedEmail, err := utils.Aes(input.Email)
+	if err != nil {
+		log.Printf("Email AES error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	hashedPassword, err := utils.HashPassword(input.Password)
 	if err != nil {
 		log.Printf("Password hashing error: %v", err)
@@ -87,11 +94,11 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, created_at`
+	query := `INSERT INTO users (email, email_encrypted, password_hash) VALUES ($1, $2, $3) RETURNING id, created_at`
 	var id int
 	var createdAt string
 
-	err = a.DB.QueryRow(query, input.Email, hashedPassword).Scan(&id, &createdAt)
+	err = a.DB.QueryRow(query, input.Email, securedEmail, hashedPassword).Scan(&id, &createdAt)
 	if err != nil {
 		log.Printf("Database insert error: %v", err)
 		http.Error(w, "Email might already be taken", http.StatusBadRequest)

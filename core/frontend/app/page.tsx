@@ -2,6 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation';
 
 //outside random words
 const words = ["PAPER", "DOOR", "THIN", "GRASS", "GRAY", "MINE", "CHALK", "CAT", "DOG", "RUN", "FAST", "BIG", "RED", "SUN", "HAT", "CUP", "PEN", "BOX", "CAR", "SKY", "SIT", "MAP", "NET", "BED", "TOY", "PIG", "PAN"];
@@ -12,6 +13,8 @@ const surrealWords = () => {
 };
 
 export default function AuthPage() {
+
+  const router = useRouter();
 
   //for signup
   const [email, setEmail] = useState('');
@@ -101,6 +104,7 @@ export default function AuthPage() {
 
     if (!email || !password){
       setError('PLEASE FILL or COMPLETE')
+      setLoading(false);
       return;
     }
 
@@ -120,6 +124,7 @@ export default function AuthPage() {
       const data = await res.json();
 
       setLoginMessage('Login Successful');
+      router.push('/dashboard');
     }catch(err: any){
       setError(err.message)
     }finally{
