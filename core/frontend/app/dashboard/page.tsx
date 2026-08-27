@@ -1,3 +1,4 @@
+'use client';
 {/*
     <main className="min-h-screen bg-black text-white font-mono p-8 flex flex-col justify-center items-center relative">
             <div className="w-[600px] h-[400px] w-full max-w-4xl bg-zinc-950 border border-zinc-800 py-60 px-20 rounded-none">
@@ -22,7 +23,95 @@
     </main>
     */}
 
+import { useState } from 'react';
+
+interface Comment {
+    id: string;
+    author: string;
+    text: string;
+    timestamp: string;
+    replies?: Comment[];
+}
+
+function CommentFunc({comment}: {comment:any}){
+    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isReplying, setIsReplying] = useState(false);
+    const [replyText, setReplyText] = useState("");
+
+    const isLongText = comment.text.length > 150;
+    const [isExpandedLong, setIsExpandedLong] = useState(false);
+
+    return (
+        <div className="flex flex-col gap-2 my-2 text-xs">
+            {/* The Comment Box */}
+            <div className="bg-zinc-900 border border-zinc-800 p-3 rounded">
+                <div className="flex justify-between items-center text-[10px] text-zinc-500 mb-1">
+                    <span className="font-mono text-emerald-400">[{comment.author}]</span>
+                    <div className="flex gap-3 item-center">
+                        <span>{comment.timestamp}</span>
+                        {comment.replies && comment.replies.length > 0 && (
+                            <button
+                            onClick={() => setIsCollapsed(!isCollapsed)} className="text-zinc=400 hover:text-white underline">
+                                {isCollapsed ? `View: ${comment.replies.length}` : "Unview"}
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Text Content with "Read More" truncation if too long */}
+                <p className="text-zinc-300 leading-relaxed">
+                    {isLongText && !isExpandedLong ? `${comment.text.substring(0,150)}...` : comment.text}
+                </p>
+
+                {isLongText && (
+                    <button
+                    onClick={() => setIsExpandedLong(!isExpandedLong)} className="text-[10px] text-blue-400 hover:underline mt-1 block">
+                        {isExpandedLong ? "Show less" : "Read more"}
+                    </button>
+                )}
+
+                {/* Reply button trigger */}
+                <button
+                onClick={() => setIsReplying(!isReplying)} className="text-[10px] text-zinc-400 hover:text-emerald-400 mt-2 block">
+                    {isReplying ? "Cancel" : "[+ Reply]"}
+                </button>
+
+                {/* Inline Reply Input Box */}
+                {isReplying && (
+                    <div className="mt-3 pt-3 border-t border-zinc-800 flex flex-col gap-2">
+                        <textarea
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder={`Replying to ${comment.author}...`} className="w-full bg-zinc-950 border border-zinc-800 p-2 rounded text-xs text-zinc-200 outline-none focus:border-zinc-600" rows={2}/>
+
+                        <button
+                        onClick={() => {
+                            alert(`Submitting reply: "${replyText}" to comment ${comment.id}`);
+                            setIsReplying(false);
+                            setReplyText("");
+                        }}className="bg-emerald-600 hover:bg-emerald-500 text-black font-semibold py-1 rounded text-[10px] self-end px-3 transition-colors">
+                            Send Reply
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* RECURSION: If not collapsed, map through child replies and indent them */}
+            {!isCollapsed && comment.replies && comment.replies.length > 0 && (
+                <div className="ml-4 pl-3 border-l-2 border-zinc-800 flex flex-col gap-2">
+                    {comment.replies.map((reply: any) => (
+                        <CommentFunc key={reply.id} comment={reply} />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function Home(){
+    const [isOpen, setIsOpen] = useState(false);
+    const [activeThreadId, setActiveThreadId] = useState<null | number>(null);
+
     return (
         <main className="min-h-screen bg-black text-zinc-100 font-mono p-6 md:p-12 flex justify-center">
             
@@ -62,11 +151,29 @@ export default function Home(){
                         
                         {/* Feed Controls / Filters */}
                         <div className="flex justify-between items-center bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-400">
-                            <span className="text-zinc-200 font-bold tracking-wider">ACTIVE DEBATES & PRS</span>
-                            <div className="flex gap-3">
-                                <button className="text-emerald-400 hover:underline">Top Logic</button>
-                                <button className="hover:text-zinc-200">Needs Review</button>
-                                <button className="hover:text-zinc-200">Recent</button>
+                            <span className="text-zinc-200 font-bold tracking-wider px-1">ACTIVE DEBATES</span>
+                            <div className="flex gap-10 bg-zinc-900/60 p-1 rounded-lg border border-zinc-800">
+
+                                <div className="relative group">
+                                    <button className="text-emerald-400 hover:underline">Recent</button>
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block px-2.5 py-1 bg-zinc-900 text-zinc-200 text-xs rounded shadow-md whitespace-nowrap border border-zinc-700 z-10">
+                                    View newest debates now
+                                    </div>
+                                </div>
+
+                                <div className="relative group">
+                                     <button className="hover:text-zinc-200">Top</button>
+                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block px-2.5 py-1 bg-zinc-900 text-zinc-200 text-xs rounded shadow-md whitespace-nowrap border border-zinc-700 z-10">
+                                     Best debates recently
+                                     </div>
+                                </div>
+                               
+                                <div className="relative group">
+                                    <button className="text-zinc-400 hover:text-zinc-200">WatchList</button>
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block px-2.5 py-1 bg-zinc-900 text-zinc-200 text-xs rounded shadow-md whitespace-nowrap border border-zinc-700 z-10">
+                                    List your favorites
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -84,7 +191,12 @@ export default function Home(){
                             </p>
                             <div className="flex justify-between items-center pt-3 border-t border-zinc-900 text-xs">
                                 <span className="text-emerald-400">Logic Score: +48</span>
-                                <button className="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 px-3 py-1 rounded border border-zinc-800 text-xs transition-colors">
+                                <button className="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 px-3 py-1 rounded border border-zinc-800 text-xs transition-colors" 
+                                onClick={() =>
+                                    {
+                                        setActiveThreadId(100);
+                                        setIsOpen(true);
+                                    }}>
                                     Review Argument
                                 </button>
                             </div>
@@ -155,6 +267,55 @@ export default function Home(){
 
             </div>
 
+            {isOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50">
+                    <div className="absolute top-6 right-6 bg-zinc-900 border border-zinc-700 p-6 rounded-lg text-white w-96 max-h-[90vh] overflow-y-auto shadow-xl">
+
+                        <button onClick={() => setIsOpen(false)} className="text-zinc-400 hover:text-white">✕</button>
+
+                        {/* Header: Author & Close Button */}
+                        <div className="flex justify-between items-center mb-4">
+                            <span className="text-sm text-zinc-400">Posted by @alex</span>
+                            </div>
+                            
+                            {/* Title & Content */}
+                            <h3 className="text-lg font-bold mb-2">Why Server-Side Rendering is Faster</h3>
+                            <p className="text-sm text-zinc-300 mb-4">
+                                Here is the breakdown of why moving logic to the server reduces client-side bundle size...
+                                </p>
+                                
+                            {/* Mini Comment Section */}
+                            
+                            <div className="border-t border-zinc-800 pt-4 mt-4 flex flex-col gap-2">
+                            <h4 className="text-[10px] font-semibold uppercase text-zinc-500 tracking-wider mb-2">Threaded Peer Reviews</h4>
+                            
+                            {/* Sample data hierarchy */}
+                            <CommentFunc comment={{
+                                id: "1",
+                                author: "ANONYMOUS_DEV_99",
+                                timestamp: "2 hrs ago",
+                                text: "Lock-free atomic pointers look solid here. Watch out for the ABA problem on high-frequency state updates under massive write spikes, because standard CAS operations won't catch intermediate pointer recycling without version tags.",
+                                replies: [
+                                    {
+                                        id: "1-1",
+                                        author: "ANONYMOUS_ARCHITECT_04",
+                                        timestamp: "1 hr ago",
+                                        text: "Good catch. Version counting or hazard pointers can completely solve the ABA vector.",
+                                        replies: [
+                                            {
+                                                id: "1-1-1",
+                                                author: "ANONYMOUS_DEV_99",
+                                                timestamp: "30 mins ago",
+                                                text: "Hazard pointers add too much overhead. Let's stick to epoch-based reclamation."
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }} />
+                        </div>
+                    </div>
+                </div>
+                )}
         </main>
     )
 }
