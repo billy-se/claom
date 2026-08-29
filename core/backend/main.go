@@ -92,7 +92,7 @@ type App struct {
 func main() {
 
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env found")
+		log.Fatalf("No .env found")
 	}
 
 	dbConnect := config.ConnectDatabase()
@@ -108,13 +108,19 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", app.handleHealthCheck)
-	mux.HandleFunc("POST /api/arguments", app.handleCreateArgument)
 	mux.HandleFunc("POST /api/register", app.handleRegister)
 	mux.HandleFunc("POST /api/login", app.handleLogin)
+	mux.HandleFunc("POST /api/arguments", app.authMiddleware(app.handleCreateArgument))
+	mux.HandleFunc("GET /api/arguments", app.handleGetArguments)
+
+	//mux.HandleFunc("POST /api/arguments", app.handleCreateArgument)
+	//mux.HandleFunc("POST /api/jwt", app.handleJWT)
+	//mux.HandleFunc("GET /api/dashboard", app.handleDashboard)
 	handler := EnableCORS(mux)
 
-	log.Printf("Server running on port %s..\n", config.Load().Port)
-	if err := http.ListenAndServe(":"+config.Load().Port, handler); err != nil {
+	cfg := config.Load()
+	log.Printf("Server running on port %s..\n", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, handler); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }

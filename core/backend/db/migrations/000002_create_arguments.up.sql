@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS arguments (
     id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
-    merit_score INT DEFAULT 0,
+    logic_score INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+

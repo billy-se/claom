@@ -1,7 +1,6 @@
 package config
 
 import (
-	"log"
 	"os"
 )
 
@@ -18,20 +17,9 @@ func Getenv(key, fallback string) string {
 }
 
 func Load() *Config {
-	dsn := os.Getenv("DSN")
-
-	if dsn == "" {
-		log.Println("Warning: dsn not set, using default local configuration")
-		dsn = "postgres://postgres:password@localhost:5432/your_db_name?sslmode=disable"
-	}
-
-	Port := os.Getenv("PORT")
-	if Port == "" {
-		Port = "2026"
-	}
 
 	return &Config{
-		DSN:  dsn,
-		Port: Port,
+		DSN:  Getenv("DSN", "postgres://postgres:password@localhost:5432/your_db_name?sslmode=disable"),
+		Port: Getenv("PORT", "2026"),
 	}
 }

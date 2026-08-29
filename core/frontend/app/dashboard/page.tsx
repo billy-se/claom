@@ -1,29 +1,6 @@
 'use client';
-{/*
-    <main className="min-h-screen bg-black text-white font-mono p-8 flex flex-col justify-center items-center relative">
-            <div className="w-[600px] h-[400px] w-full max-w-4xl bg-zinc-950 border border-zinc-800 py-60 px-20 rounded-none">
-                <div className="absolute left-270 top-43 h-100 w-[1px] bg-zinc-800"></div>
-                <div className="absolute left-265 top-55 h-100 w-[1px] bg-zinc-700 h-[340px]"></div>
 
-                <div className="w-22 h-22 bg-black border border-zinc-700 rounded-full flex items-center justify-center absolute right-125 bottom-50"></div>
-                <div className="w-22 h-22 bg-black border border-zinc-700 rounded-full flex items-center justify-center absolute right-125 top-80"></div>
-                <div className="w-22 h-22 bg-black border border-zinc-700 rounded-full flex items-center justify-center absolute right-125 top-50"></div>
-
-                <div className="w-24 h-24 bg-black border border-zinc-700 rounded-none flex items-center justify-center absolute right-85 top-45"></div>
-                <div className="w-24 h-24 bg-black border border-zinc-700 rounded-none flex items-center justify-center absolute right-85 top-85"></div>
-
-                <div className="w-10 h-10 border-t-2 border-r-2 border-zinc-400 rotate-315 absolute right-92.5 bottom-40"></div>
-                
-                <div className="w-10 h-10 bg-amber-200 border border-zinc-700 rounded-none flex items-center justify-center relative left-120 bottom-50">
-                    <span className="font-serif italic text-2xl text-black">p</span></div>
-
-                <div className="absolute left-30 top-10 h-85 w-[1px] bg-zinc-800 top-60 left-225" />
-                
-            </div>
-    </main>
-    */}
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface Comment {
     id: string;
@@ -31,6 +8,15 @@ interface Comment {
     text: string;
     timestamp: string;
     replies?: Comment[];
+}
+
+interface Argument {
+  id: number;
+  author: string;
+  title: string;
+  content: string;
+  logic_score: number;
+  created_at: string;
 }
 
 function CommentFunc({comment}: {comment:any}){
@@ -51,7 +37,7 @@ function CommentFunc({comment}: {comment:any}){
                         <span>{comment.timestamp}</span>
                         {comment.replies && comment.replies.length > 0 && (
                             <button
-                            onClick={() => setIsCollapsed(!isCollapsed)} className="text-zinc=400 hover:text-white underline">
+                            onClick={() => setIsCollapsed(!isCollapsed)} className="text-zinc-400 hover:text-white underline">
                                 {isCollapsed ? `View: ${comment.replies.length}` : "Unview"}
                             </button>
                         )}
@@ -89,7 +75,7 @@ function CommentFunc({comment}: {comment:any}){
                             alert(`Submitting reply: "${replyText}" to comment ${comment.id}`);
                             setIsReplying(false);
                             setReplyText("");
-                        }}className="bg-emerald-600 hover:bg-emerald-500 text-black font-semibold py-1 rounded text-[10px] self-end px-3 transition-colors">
+                        }} className="bg-emerald-600 hover:bg-emerald-500 text-black font-semibold py-1 rounded text-[10px] self-end px-3 transition-colors">
                             Send Reply
                         </button>
                     </div>
@@ -111,7 +97,17 @@ function CommentFunc({comment}: {comment:any}){
 export default function Home(){
     const [isOpen, setIsOpen] = useState(false);
     const [activeThreadId, setActiveThreadId] = useState<null | number>(null);
+    const [argumentsList, setArgumentsList] = useState<Argument[]>([]);
 
+    useEffect(() => {
+        fetch('http://localhost:2026/api/arguments')
+        .then((res) => res.json())
+        .then((data) => setArgumentsList(data))
+        .catch((err) => console.error("Failed to fetch arguments:", err)); 
+    }, []);
+
+    const activeArguments = (argumentsList || []).find((arg) => arg.id === activeThreadId);
+    
     return (
         <main className="min-h-screen bg-black text-zinc-100 font-mono p-6 md:p-12 flex justify-center">
             
@@ -124,7 +120,7 @@ export default function Home(){
                         <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse" />
                         <div>
                             <h1 className="text-sm font-semibold tracking-widest uppercase text-zinc-200">
-                                [ SESSION_ALIAS: USER_HASH_8842 ]
+                                {activeArguments?.author || "SYSTEM_ROOT"}
                             </h1>
                             <p className="text-[10px] text-zinc-500">Zero-Bias Identity Protection Active</p>
                         </div>
@@ -177,51 +173,32 @@ export default function Home(){
                             </div>
                         </div>
 
-                        {/* Thread Card 1 */}
-                        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-5 flex flex-col gap-4 hover:border-zinc-700 transition-colors">
+                        {/* Thread Cards */}
+                        {(argumentsList || []).map((arg) => (
+                            <div key={arg.id} className="bg-zinc-950 border border-zinc-800 rounded-lg p-5 flex flex-col gap-4 hover:border-zinc-700 transition-colors">
                             <div className="flex justify-between items-center text-[10px] text-zinc-500">
-                                <span>AUTHOR: [ ANONYMOUS_DEV_49 ]</span>
+                                <span>AUTHOR: [{arg.author}]</span>
                                 <span className="bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 text-zinc-300">Pull Request #104</span>
                             </div>
                             <h2 className="text-sm font-semibold text-zinc-100">
-                                Optimizing State Synchronization in Distributed Rust Microservices without Locks
+                                {arg.title}
                             </h2>
                             <p className="text-xs text-zinc-400 leading-relaxed">
-                                Proposing an optimistic concurrency control pattern that eliminates lock contention under heavy write loads. Looking for edge-case peer reviews on memory safety.
+                                {arg.content}
                             </p>
                             <div className="flex justify-between items-center pt-3 border-t border-zinc-900 text-xs">
-                                <span className="text-emerald-400">Logic Score: +48</span>
+                                <span className="text-emerald-400">Logic Score: +{arg.logic_score}</span>
                                 <button className="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 px-3 py-1 rounded border border-zinc-800 text-xs transition-colors" 
                                 onClick={() =>
                                     {
-                                        setActiveThreadId(100);
+                                        setActiveThreadId(arg.id);
                                         setIsOpen(true);
                                     }}>
                                     Review Argument
                                 </button>
                             </div>
                         </div>
-
-                        {/* Thread Card 2 */}
-                        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-5 flex flex-col gap-4 hover:border-zinc-700 transition-colors">
-                            <div className="flex justify-between items-center text-[10px] text-zinc-500">
-                                <span>AUTHOR: [ ANONYMOUS_ARCHITECT_12 ]</span>
-                                <span className="bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 text-zinc-300">Architecture Debate</span>
-                            </div>
-                            <h2 className="text-sm font-semibold text-zinc-100">
-                                Why Time-Decay Algorithms Outperform Pure Upvoting in Meritocratic Systems
-                            </h2>
-                            <p className="text-xs text-zinc-400 leading-relaxed">
-                                Analyzing the mathematical flaws of static upvote weights and how a half-life decay formula ensures early bias doesn't dominate discussion boards.
-                            </p>
-                            <div className="flex justify-between items-center pt-3 border-t border-zinc-900 text-xs">
-                                <span className="text-emerald-400">Logic Score: +32</span>
-                                <button className="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 px-3 py-1 rounded border border-zinc-800 text-xs transition-colors">
-                                    Review Argument
-                                </button>
-                            </div>
-                        </div>
-
+                        ))}
                     </div>
 
                     {/* Right Column: User Actions & System Info */}
@@ -267,56 +244,38 @@ export default function Home(){
 
             </div>
 
-            {isOpen && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50">
-                    <div className="absolute top-6 right-6 bg-zinc-900 border border-zinc-700 p-6 rounded-lg text-white w-96 max-h-[90vh] overflow-y-auto shadow-xl">
-
-                        <button onClick={() => setIsOpen(false)} className="text-zinc-400 hover:text-white">✕</button>
+            {/* Modal Drawer */}
+            {isOpen && activeArguments &&(
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-end">
+                    <div className="bg-zinc-900 border-l border-zinc-700 p-6 text-white w-full max-w-xl h-full overflow-y-auto shadow-xl">
 
                         {/* Header: Author & Close Button */}
                         <div className="flex justify-between items-center mb-4">
-                            <span className="text-sm text-zinc-400">Posted by @alex</span>
-                            </div>
+                            <span className="text-sm text-zinc-400">Posted by {activeArguments?.author}</span>
+                            <button onClick={() => setIsOpen(false)} className="text-zinc-400 hover:text-white">✕</button>
+                        </div>
                             
-                            {/* Title & Content */}
-                            <h3 className="text-lg font-bold mb-2">Why Server-Side Rendering is Faster</h3>
-                            <p className="text-sm text-zinc-300 mb-4">
-                                Here is the breakdown of why moving logic to the server reduces client-side bundle size...
-                                </p>
-                                
-                            {/* Mini Comment Section */}
+                        {/* Title & Content */}
+                        <h3 className="text-lg font-bold mb-2">{activeArguments?.title}</h3>
+                        <p className="text-sm text-zinc-300 mb-4">
+                            {activeArguments?.content}
+                        </p>
                             
-                            <div className="border-t border-zinc-800 pt-4 mt-4 flex flex-col gap-2">
+                        {/* Mini Comment Section */}
+                        <div className="border-t border-zinc-800 pt-4 mt-4 flex flex-col gap-2">
                             <h4 className="text-[10px] font-semibold uppercase text-zinc-500 tracking-wider mb-2">Threaded Peer Reviews</h4>
                             
-                            {/* Sample data hierarchy */}
                             <CommentFunc comment={{
                                 id: "1",
                                 author: "ANONYMOUS_DEV_99",
                                 timestamp: "2 hrs ago",
                                 text: "Lock-free atomic pointers look solid here. Watch out for the ABA problem on high-frequency state updates under massive write spikes, because standard CAS operations won't catch intermediate pointer recycling without version tags.",
-                                replies: [
-                                    {
-                                        id: "1-1",
-                                        author: "ANONYMOUS_ARCHITECT_04",
-                                        timestamp: "1 hr ago",
-                                        text: "Good catch. Version counting or hazard pointers can completely solve the ABA vector.",
-                                        replies: [
-                                            {
-                                                id: "1-1-1",
-                                                author: "ANONYMOUS_DEV_99",
-                                                timestamp: "30 mins ago",
-                                                text: "Hazard pointers add too much overhead. Let's stick to epoch-based reclamation."
-                                            }
-                                        ]
-                                    }
-                                ]
+                                replies: []
                             }} />
                         </div>
                     </div>
                 </div>
-                )}
+            )}
         </main>
-    )
+    );
 }
-

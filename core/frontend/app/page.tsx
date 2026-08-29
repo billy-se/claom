@@ -25,8 +25,6 @@ export default function AuthPage() {
   const [succcesId, setSuccessId] = useState<number | null>(null);
   const [loginMessage, setLoginMessage] = useState('');
 
-  let errorMessage;
-
   //inside random words
   const [selectedWords, setSelectedWords] = useState<string[]>(["","","","",""]);
 
@@ -78,7 +76,7 @@ export default function AuthPage() {
       });
 
       if (!res.ok) {
-        errorMessage = await res.text();
+        const errorMessage = await res.text();
         setError(errorMessage)
         return;
       }
@@ -116,12 +114,14 @@ export default function AuthPage() {
       });
 
       if (!res.ok){
-        errorMessage = await res.text();
+        const errorMessage = await res.text();
         setError(errorMessage)
         return;
       }
 
       const data = await res.json();
+
+      localStorage.setItem('token', data.token);
 
       setLoginMessage('Login Successful');
       router.push('/dashboard');
