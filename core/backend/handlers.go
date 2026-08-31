@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 	"vaine-backend/utils"
 
@@ -27,16 +28,13 @@ func (a *App) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// Expecting format: "Bearer <token>"
-		tokenString := ""
-		fmt.Sscanf(authHeader, "Bearer %s", &tokenString)
-		if tokenString == "" {
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader || tokenString == "" {
 			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
 			return
 		}
 
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			// Ensure signing method is HMAC
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method")
 			}
@@ -54,7 +52,6 @@ func (a *App) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// JWT numbers are decoded as float64 by default
 		userIDFloat, ok := claims["user_id"].(float64)
 		if !ok {
 			http.Error(w, "Invalid user ID in token", http.StatusUnauthorized)
@@ -63,7 +60,6 @@ func (a *App) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		userID := int(userIDFloat)
 
-		// Store user_id in the request context
 		ctx := context.WithValue(r.Context(), userIDKey, userID)
 		next(w, r.WithContext(ctx))
 	}
@@ -86,6 +82,7 @@ func generateJWT(userID int) string {
 }
 
 type ArgumentInput struct {
+	Title   string `json:"title"`
 	Content string `json:"content"`
 }
 
@@ -101,12 +98,18 @@ type User struct {
 }
 
 type ArgumentResponse struct {
-	ID         int    `json:"id"`
-	Author     string `json:"author"`
-	Title      string `json:"title"`
-	Content    string `json:"content"`
-	LogicScore int    `json:"logic_score"`
-	CreatedAt  string `json:"created_at"`
+	ID         int            `json:"id"`
+	Author     string         `json:"author"`
+	Title      string         `json:"title"`
+	Content    string         `json:"content"`
+	LogicScore int            `json:"logic_score"`
+	CreatedAt  string         `json:"created_at"`
+	Comments   []CommentInput `json:"comments"`
+}
+
+type AuditResponse struct {
+	Score  int    `json:"score"`
+	Review string `json:"review"`
 }
 
 func (a *App) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +121,14 @@ func (a *App) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Engine: online, DB: connected"))
+}
+
+func cleanJSONResponse(input string) string {
+	input = strings.TrimSpace(input)
+	input = strings.TrimPrefix(input, "```json")
+	input = strings.TrimPrefix(input, "```")
+	input = strings.TrimSuffix(input, "```")
+	return strings.TrimSpace(input)
 }
 
 func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
@@ -138,21 +149,68 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	botResponseText, err := CallBotAgent(input.Content)
+	var score int = 50
+	var reviewContent = "Automated security audit failed to generate review."
+
+	if err == nil {
+		var audit AuditResponse
+		cleanedJSON := cleanJSONResponse(botResponseText)
+		if json.Unmarshal([]byte(cleanedJSON), &audit) == nil {
+			score = audit.Score
+			reviewContent = audit.Review
+		} else {
+			reviewContent = botResponseText
+		}
+	} else {
+		log.Printf("Bot agent call error: %v", err)
+	}
+
 	query := `
-	INSERT INTO arguments (content, user_id) VALUES ($1, $2) RETURNING id, created_at`
+        INSERT INTO arguments (title, content, user_id, logic_score) 
+        VALUES ($1, $2, $3, $4) 
+        RETURNING id, logic_score, created_at`
+
 	var id int
+	var logicScore int
 	var createdAt string
 
-	err := a.DB.QueryRow(query, input.Content, userID).Scan(&id, &createdAt)
+	err = a.DB.QueryRow(query, input.Title, input.Content, userID, score).Scan(&id, &logicScore, &createdAt)
 	if err != nil {
 		log.Printf("Database insert error: %v", err)
 		http.Error(w, "Failed to save argument", http.StatusInternalServerError)
 		return
 	}
 
+	if reviewContent != "" {
+		commentQuery := `INSERT INTO comments (argument_id, user_id, content) VALUES ($1, NULL, $2)`
+		_, commentErr := a.DB.Exec(commentQuery, id, reviewContent)
+		if commentErr != nil {
+			log.Printf("Failed to save bot review comment: %v", commentErr)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, `{"message": "Saved", "id": %d}`, id)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":     "Saved",
+		"id":          id,
+		"logic_score": logicScore,
+		"created_at":  createdAt,
+	})
 }
+
+/*botResponse, err := CallBotAgent(input.Content)
+if err != nil {
+	fmt.Println("Bot failed to respond:", err)
+} else {
+	commentQuery := `INSERT INTO comments (argument_id, content, user_id) VALUES ($1, $2, $3)`
+
+	_, err = a.DB.Exec(commentQuery, id, botResponse, 0)
+	if err != nil {
+		log.Printf("Failed to save bot comment: %v", err)
+	}
+}*/
 
 func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -182,8 +240,72 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Dynamically map real user_id to a secure randomized alias
 		arg.Author = fmt.Sprintf("ANONYMOUS_DEV_%d", (rawUserID*31)%900+100)
+
+		commentQuery := `
+            SELECT id, user_id, parent_id, content, created_at 
+            FROM comments 
+            WHERE argument_id = $1 
+            ORDER BY created_at ASC
+        `
+		commentRows, err := a.DB.Query(commentQuery, arg.ID)
+		if err != nil {
+			arg.Comments = []CommentInput{}
+			arguments = append(arguments, arg)
+			continue
+		}
+
+		var flatComments []CommentInput
+		for commentRows.Next() {
+			var cID int64
+			var cUserID int
+			var parentID *int64
+			var content string
+			var createdAt string
+
+			if err := commentRows.Scan(&cID, &cUserID, &parentID, &content, &createdAt); err == nil {
+				flatComments = append(flatComments, CommentInput{
+					ID:        fmt.Sprintf("%d", cID),
+					ParentID:  parentID,
+					Author:    fmt.Sprintf("ANONYMOUS_DEV_%d", (cUserID*31)%900+100),
+					Text:      content,
+					Timestamp: createdAt,
+					Replies:   []CommentInput{},
+				})
+			}
+		}
+		commentRows.Close()
+
+		if err := commentRows.Err(); err != nil {
+			log.Printf("Comment row iteration error: %v", err)
+		}
+
+		commentMap := make(map[string]*CommentInput)
+		var rootComments []CommentInput
+
+		for i := range flatComments {
+			commentMap[flatComments[i].ID] = &flatComments[i]
+		}
+
+		for i := range flatComments {
+			comment := &flatComments[i]
+			if comment.ParentID == nil {
+				rootComments = append(rootComments, *comment)
+			} else {
+				parentIDStr := fmt.Sprintf("%d", *comment.ParentID)
+				if parent, exists := commentMap[parentIDStr]; exists {
+					parent.Replies = append(parent.Replies, *comment)
+				} else {
+					rootComments = append(rootComments, *comment)
+				}
+			}
+		}
+
+		if rootComments == nil {
+			arg.Comments = []CommentInput{}
+		} else {
+			arg.Comments = rootComments
+		}
 
 		arguments = append(arguments, arg)
 	}
@@ -192,6 +314,10 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Row iteration error: %v", err)
 		http.Error(w, "Failed to fetch arguments", http.StatusInternalServerError)
 		return
+	}
+
+	if arguments == nil {
+		arguments = []ArgumentResponse{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -241,7 +367,7 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	err = a.DB.QueryRow(query, input.Email, securedEmail, hashedPassword).Scan(&id, &createdAt)
 	if err != nil {
-		log.Printf("Database insert error: %v", err)
+		log.Printf("Database insert errorrr: %v", err)
 		http.Error(w, "Email might already be taken", http.StatusBadRequest)
 		return
 	}
@@ -301,11 +427,64 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type CommentInput struct {
+	ID         string         `json:"id,omitempty"`
+	ArgumentID int64          `json:"argument_id,omitempty"`
+	ParentID   *int64         `json:"parent_id,omitempty"`
+	Content    string         `json:"content,omitempty"`
+	Author     string         `json:"author,omitempty"`
+	Text       string         `json:"text,omitempty"`
+	Timestamp  string         `json:"timestamp,omitempty"`
+	Replies    []CommentInput `json:"replies,omitempty"`
+}
+
+func (a *App) handleCreateComment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, ok := r.Context().Value(userIDKey).(int)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var input CommentInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Content == "" {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	query := `
+        INSERT INTO comments (argument_id, parent_id, user_id, content)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, created_at`
+
+	var id int64
+	var createdAt string
+
+	err := a.DB.QueryRow(query, input.ArgumentID, input.ParentID, userID, input.Content).Scan(&id, &createdAt)
+	if err != nil {
+		log.Printf("Database insert error: %v", err)
+		http.Error(w, "Failed to save comment", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":    "Comment saved",
+		"id":         id,
+		"created_at": createdAt,
+	})
+}
+
 func EnableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, PATCH, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)

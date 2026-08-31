@@ -112,6 +112,7 @@ func main() {
 	mux.HandleFunc("POST /api/login", app.handleLogin)
 	mux.HandleFunc("POST /api/arguments", app.authMiddleware(app.handleCreateArgument))
 	mux.HandleFunc("GET /api/arguments", app.handleGetArguments)
+	mux.HandleFunc("POST /api/comments", app.authMiddleware(app.handleCreateComment))
 
 	//mux.HandleFunc("POST /api/arguments", app.handleCreateArgument)
 	//mux.HandleFunc("POST /api/jwt", app.handleJWT)

@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS comments(
-    id SERIAL PRIMARY KEY,
-    argument_id INTEGER REFERENCES arguments(id) ON DELETE CASCADE,
-    parent_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    text_ TEXT NOT NULL,
+    id BIGSERIAL PRIMARY KEY,
+    argument_id BIGINT REFERENCES arguments(id) ON DELETE CASCADE,
+    parent_id BIGINT REFERENCES comments(id) ON DELETE CASCADE,
+    user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
