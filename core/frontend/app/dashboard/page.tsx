@@ -5,6 +5,12 @@ import { Comment, Argument } from './types';
 import { ReviewModal } from './reviewModal';
 import { CreateArgumentModal } from './createModal';
 
+export function handleViewerModeClick(setIsLoggedIn: (value: boolean) => void, setIsCreateOpen: (value: boolean) => void){
+    localStorage.removeItem('token');
+    setIsLoggedIn(false);
+    setIsCreateOpen(false);
+}
+
 export default function Home() {
     const [isOpen, setIsOpen] = useState(false);
     const [activeThreadId, setActiveThreadId] = useState<null | number>(null);
@@ -16,15 +22,37 @@ export default function Home() {
     const [newAuthor, setNewAuthor] = useState("");
 
     const [error, setError] = useState('');
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
 
     useEffect(() => {
+    
+        const token = localStorage.getItem('token');
+        if (token){
+            setIsLoggedIn(true);
+        }
+
         fetch('http://localhost:2026/api/arguments')
         .then((res) => res.json())
         .then((data) => {
-            const initializedData = data.map((arg: Argument) => ({ ...arg, comments: arg.comments || [] }));
-            setArgumentsList(initializedData);
-        })
-        .catch((err) => console.error("Failed to fetch arguments:", err)); 
+            const mapComments = (commentsList: any[]): Comment[] => {
+                if (!commentsList) return [];
+                return commentsList.map((c: any) => ({
+                    id: String(c.id),
+                    author: c.author || "ANONYMOUS",
+                    text: c.text || c.content,
+                    timestamp: c.created_at || "Just now",
+                    replies: mapComments(c.replies || c.comments || [])
+                }));
+            };
+
+    const initializedData = data.map((arg: Argument) => ({ 
+        ...arg, 
+        comments: mapComments(arg.comments || []) 
+    }));
+    
+    setArgumentsList(initializedData);
+})
+.catch((err) => console.error("Failed to fetch arguments:", err));
     }, []);
 
     const activeArguments = (argumentsList || []).find((arg) => arg.id === activeThreadId) ?? null;
@@ -46,8 +74,8 @@ export default function Home() {
     if (!activeThreadId) return;
 
     const newComment: Comment = {
-        id: String(savedComment.id), // Use the real database integer ID
-        author: "CURRENT_USER",
+        id: String(savedComment.id),
+        author: "YOU",
         text: savedComment.content,
         timestamp: savedComment.created_at || "Just now",
         replies: []
@@ -195,9 +223,10 @@ export default function Home() {
                     </div>
 
                     <div className="flex flex-col gap-6">
+                        {isLoggedIn && (
                         <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-5 flex flex-col gap-4">
                             <h2 className="text-xs font-bold tracking-wider uppercase text-zinc-200">
-                                [ SUBMIT FOR REVIEW ]
+                                SUBMIT FOR REVIEW
                             </h2>
                             <p className="text-xs text-zinc-500">
                                 Submit a code proposal, paper, or architectural argument to the blind review pool.
@@ -207,6 +236,7 @@ export default function Home() {
                                 Create an Argument
                             </button>
                         </div>
+                        )}
 
                         <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-5 flex flex-col gap-3">
                             <h2 className="text-xs font-bold tracking-wider uppercase text-zinc-200">
@@ -230,14 +260,16 @@ export default function Home() {
                     </div>
                 </div>
 
-                <ReviewModal 
+                    <ReviewModal 
                     isOpen={isOpen} 
                     activeArguments={activeArguments} 
                     setIsOpen={setIsOpen} 
                     handleAddReply={handleAddReply} 
                 />
 
-                <CreateArgumentModal 
+                {isLoggedIn && (
+                    <>
+                <CreateArgumentModal
                     isCreateOpen={isCreateOpen}
                     error={error}
                     newAuthor={newAuthor}
@@ -249,7 +281,8 @@ export default function Home() {
                     setIsCreateOpen={setIsCreateOpen}
                     onSubmit={handleCreateSubmit}
                 />
-
+                    </>
+                )}
             </div>
         </main>
     );

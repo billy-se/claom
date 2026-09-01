@@ -98,13 +98,13 @@ type User struct {
 }
 
 type ArgumentResponse struct {
-	ID         int            `json:"id"`
-	Author     string         `json:"author"`
-	Title      string         `json:"title"`
-	Content    string         `json:"content"`
-	LogicScore int            `json:"logic_score"`
-	CreatedAt  string         `json:"created_at"`
-	Comments   []CommentInput `json:"comments"`
+	ID         int             `json:"id"`
+	Author     string          `json:"author"`
+	Title      string          `json:"title"`
+	Content    string          `json:"content"`
+	LogicScore int             `json:"logic_score"`
+	CreatedAt  string          `json:"created_at"`
+	Comments   []*CommentInput `json:"comments"`
 }
 
 type AuditResponse struct {
@@ -250,7 +250,7 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
         `
 		commentRows, err := a.DB.Query(commentQuery, arg.ID)
 		if err != nil {
-			arg.Comments = []CommentInput{}
+			arg.Comments = []*CommentInput{}
 			arguments = append(arguments, arg)
 			continue
 		}
@@ -258,20 +258,35 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 		var flatComments []CommentInput
 		for commentRows.Next() {
 			var cID int64
-			var cUserID int
-			var parentID *int64
+			var cUserID sql.NullInt32
+			var parentID sql.NullInt64
 			var content string
 			var createdAt string
 
 			if err := commentRows.Scan(&cID, &cUserID, &parentID, &content, &createdAt); err == nil {
+				var pID *int64
+				if parentID.Valid {
+					val := parentID.Int64
+					pID = &val
+				}
+
+				var authorStr string
+				if cUserID.Valid {
+					authorStr = fmt.Sprintf("ANONYMOUS_DEV_%d", (int(cUserID.Int32)*31)%900+100)
+				} else {
+					authorStr = "BOT_REVIEWER"
+				}
+
 				flatComments = append(flatComments, CommentInput{
 					ID:        fmt.Sprintf("%d", cID),
-					ParentID:  parentID,
-					Author:    fmt.Sprintf("ANONYMOUS_DEV_%d", (cUserID*31)%900+100),
+					ParentID:  pID,
+					Author:    authorStr,
 					Text:      content,
 					Timestamp: createdAt,
-					Replies:   []CommentInput{},
+					Replies:   []*CommentInput{},
 				})
+			} else {
+				log.Printf("Comment scan error: %v", err)
 			}
 		}
 		commentRows.Close()
@@ -281,7 +296,7 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 		}
 
 		commentMap := make(map[string]*CommentInput)
-		var rootComments []CommentInput
+		var rootComments []*CommentInput
 
 		for i := range flatComments {
 			commentMap[flatComments[i].ID] = &flatComments[i]
@@ -290,19 +305,24 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 		for i := range flatComments {
 			comment := &flatComments[i]
 			if comment.ParentID == nil {
-				rootComments = append(rootComments, *comment)
+				rootComments = append(rootComments, comment)
 			} else {
 				parentIDStr := fmt.Sprintf("%d", *comment.ParentID)
 				if parent, exists := commentMap[parentIDStr]; exists {
-					parent.Replies = append(parent.Replies, *comment)
+					parent.Replies = append(parent.Replies, comment)
 				} else {
-					rootComments = append(rootComments, *comment)
+					rootComments = append(rootComments, comment)
 				}
 			}
 		}
 
-		if rootComments == nil {
-			arg.Comments = []CommentInput{}
+		var finalRootComments []CommentInput
+		for _, rc := range rootComments {
+			finalRootComments = append(finalRootComments, *rc)
+		}
+
+		if finalRootComments == nil {
+			arg.Comments = []*CommentInput{}
 		} else {
 			arg.Comments = rootComments
 		}
@@ -428,14 +448,14 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 type CommentInput struct {
-	ID         string         `json:"id,omitempty"`
-	ArgumentID int64          `json:"argument_id,omitempty"`
-	ParentID   *int64         `json:"parent_id,omitempty"`
-	Content    string         `json:"content,omitempty"`
-	Author     string         `json:"author,omitempty"`
-	Text       string         `json:"text,omitempty"`
-	Timestamp  string         `json:"timestamp,omitempty"`
-	Replies    []CommentInput `json:"replies,omitempty"`
+	ID         string          `json:"id,omitempty"`
+	ArgumentID int64           `json:"argument_id,omitempty"`
+	ParentID   *int64          `json:"parent_id,omitempty"`
+	Content    string          `json:"content,omitempty"`
+	Author     string          `json:"author,omitempty"`
+	Text       string          `json:"text,omitempty"`
+	Timestamp  string          `json:"timestamp,omitempty"`
+	Replies    []*CommentInput `json:"replies,omitempty"`
 }
 
 func (a *App) handleCreateComment(w http.ResponseWriter, r *http.Request) {

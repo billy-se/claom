@@ -16,7 +16,6 @@ export default function AuthPage() {
 
   const router = useRouter();
 
-  //for signup
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -25,8 +24,7 @@ export default function AuthPage() {
   const [succcesId, setSuccessId] = useState<number | null>(null);
   const [loginMessage, setLoginMessage] = useState('');
 
-  //inside random words
-  const [selectedWords, setSelectedWords] = useState<string[]>(["","","","",""]);
+  const [selectedWords, setSelectedWords] = useState<string[]>(["","","","","",""]);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -42,7 +40,6 @@ export default function AuthPage() {
     return () => clearInterval(timeoutId);
   },[]);
 
-  // for random words
   useEffect(() => {
     if (succcesId || error || loginMessage) {
       const timer = setTimeout(() => {
@@ -132,12 +129,6 @@ export default function AuthPage() {
     }
   }
 
-  const handleAction = async (endpoint: string) => {
-    // TODO: Hook up your backend fetch here later
-    console.log(`Sending ${endpoint} request with:`, { email, password })
-  }
-
-  // Determine what message to show in the single unified banner slot
   const isVisible = loading || succcesId !== null || error !== '' || loginMessage !== '';
 
   return (
@@ -151,7 +142,7 @@ export default function AuthPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSignup} className="border border-zinc-800 p-6 w-full max-w-md bg-zinc-950">
+      <div className="border border-zinc-800 p-6 w-full max-w-md bg-zinc-950">
         <h1 className="text-sm tracking-widest text-zinc-400 mb-6 uppercase">
           {selectedWords[0]}_{selectedWords[1]} {selectedWords[2]}_{selectedWords[3]} {selectedWords[4]}_{selectedWords[5]}
         </h1>
@@ -180,7 +171,8 @@ export default function AuthPage() {
               LOGIN
             </button>
             <button 
-              type="submit"
+              type="button"
+              onClick={handleSignup}
               className="flex-1 border border-zinc-700 text-xs py-2 hover:border-white"
             >
               SIGN_UP
@@ -189,13 +181,16 @@ export default function AuthPage() {
 
           <button 
             type="button"
-            onClick={() => handleAction('viewer')}
+            onClick={() => {
+              localStorage.removeItem('token');
+              router.push('/dashboard');
+            }}
             className="mt-2 text-zinc-500 text-xs hover:text-white underline text-center"
           >
-            [ BYPASS: ENTER VIEWER MODE ]
+            Enter Viewer Mode
           </button>
         </div>
-      </form>
+      </div>
     </main>
   )
 }

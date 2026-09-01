@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Comment } from './types';
 
 interface CommentFuncProps {
@@ -11,6 +11,12 @@ export function CommentFunc({ comment, argumentId, onAddReply }: CommentFuncProp
     const [isLook, setIsLook] = useState(false);
     const [isReplying, setIsReplying] = useState(false);
     const [replyText, setReplyText] = useState("");
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (token) setIsLoggedIn(true);
+    }, []);
 
     const isLongText = comment.text.length > 150;
     const [isExpandedLong, setIsExpandedLong] = useState(false);
@@ -42,12 +48,15 @@ export function CommentFunc({ comment, argumentId, onAddReply }: CommentFuncProp
                     </button>
                 )}
 
-                <button
-                    onClick={() => setIsReplying(!isReplying)} className="text-[10px] text-zinc-400 hover:text-emerald-400 mt-2 block">
-                    {isReplying ? "Cancel" : "[+ Reply]"}
-                </button>
+                {/* Only show reply button if logged in */}
+                {isLoggedIn && (
+                    <button
+                        onClick={() => setIsReplying(!isReplying)} className="text-[10px] text-zinc-400 hover:text-emerald-400 mt-2 block">
+                        {isReplying ? "Cancel" : "[+ Reply]"}
+                    </button>
+                )}
 
-                {isReplying && (
+                {isReplying && isLoggedIn && (
                     <div className="mt-3 pt-3 border-t border-zinc-800 flex flex-col gap-2">
                         <textarea
                             value={replyText}
@@ -119,6 +128,20 @@ interface PrimaryCommentInputProps {
 
 export function PrimaryCommentInput({ argumentId, onAddReply }: PrimaryCommentInputProps) {
     const [primaryText, setPrimaryText] = useState("");
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (token) setIsLoggedIn(true);
+    }, []);
+
+    if (!isLoggedIn) {
+        return (
+            <div className="text-zinc-500 text-xs italic py-2">
+                Log in first to post a comment :)
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col gap-2">

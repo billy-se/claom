@@ -44,7 +44,7 @@ export function CreateArgumentModal({
                             type="text" 
                             value={newAuthor} 
                             onChange={(e) => setNewAuthor(e.target.value)}
-                            placeholder="e.g. ANONYMOUS_DEV" 
+                            placeholder="e.g. ANONYMOUS_DEV (OPTIONAL)" 
                             className="bg-zinc-950 border border-zinc-800 p-2 rounded text-xs text-zinc-200 outline-none focus:border-zinc-600"
                         />
                     </div>
@@ -76,7 +76,7 @@ export function CreateArgumentModal({
                     <button 
                         type="submit" 
                         className="bg-emerald-600 hover:bg-emerald-500 text-black font-semibold py-2 rounded text-xs transition-colors mt-2">
-                        Submit to Review Pool
+                        Submit
                     </button>
                 </form>
             </div>
