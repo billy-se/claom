@@ -1,5 +1,5 @@
 import { Argument } from './types';
-import { PrimaryCommentInput, CommentFunc } from './comments';
+import { PrimaryCommentInput, CommentFunc} from './comments';
 
 interface ReviewModalProps {
     isOpen: boolean;
@@ -8,16 +8,19 @@ interface ReviewModalProps {
     handleAddReply: (targetId: string, savedComment: { id: number; content: string; created_at: string }) => void;
 }
 
-export function ReviewModal({ isOpen, activeArguments, setIsOpen, handleAddReply }: ReviewModalProps) {
+export function ReviewModal({ isOpen, activeArguments, setIsOpen, handleAddReply}: ReviewModalProps) {
     if (!isOpen || !activeArguments) return null;
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-end">
-            <div className="bg-zinc-900 border-l border-zinc-700 p-6 text-white w-full max-w-xl h-full overflow-y-auto shadow-xl">
+            <div key={activeArguments.id} className="bg-zinc-900 border-l border-zinc-700 p-6 text-white w-full max-w-xl h-full overflow-y-auto shadow-xl">
 
                 <div className="flex justify-between items-center mb-4">
                     <span className="text-sm text-zinc-400">Posted by {activeArguments?.author}</span>
-                    <button onClick={() => setIsOpen(false)} className="text-zinc-400 hover:text-white">✕</button>
+                    <button onClick={() => {
+                        setIsOpen(false);
+                        }} 
+                        className="text-zinc-400 hover:text-white">✕</button>
                 </div>
                     
                 <h3 className="text-lg font-bold mb-2">{activeArguments?.title}</h3>

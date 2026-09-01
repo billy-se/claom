@@ -42,7 +42,7 @@ export default function Home() {
                     text: c.text || c.content,
                     timestamp: c.created_at || "Just now",
                     replies: mapComments(c.replies || c.comments || [])
-                }));
+                })).reverse();
             };
 
     const initializedData = data.map((arg: Argument) => ({ 
@@ -264,7 +264,7 @@ export default function Home() {
                     isOpen={isOpen} 
                     activeArguments={activeArguments} 
                     setIsOpen={setIsOpen} 
-                    handleAddReply={handleAddReply} 
+                    handleAddReply={handleAddReply}
                 />
 
                 {isLoggedIn && (

@@ -7,11 +7,12 @@ interface CommentFuncProps {
     onAddReply: (commentId: string, savedComment: { id: number; content: string; created_at: string }) => void;
 }
 
-export function CommentFunc({ comment, argumentId, onAddReply }: CommentFuncProps) {
-    const [isLook, setIsLook] = useState(false);
+export function CommentFunc({ comment, argumentId, onAddReply}: CommentFuncProps) {
+
     const [isReplying, setIsReplying] = useState(false);
     const [replyText, setReplyText] = useState("");
     const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(true);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -30,8 +31,8 @@ export function CommentFunc({ comment, argumentId, onAddReply }: CommentFuncProp
                         <span>{comment.timestamp}</span>
                         {comment.replies && comment.replies.length > 0 && (
                             <button
-                                onClick={() => setIsLook(!isLook)} className="text-zinc-400 hover:text-white underline">
-                                {isLook ? `View: ${comment.replies.length}` : "Unview"}
+                                onClick={() => setIsCollapsed(!isCollapsed)} className="text-zinc-400 hover:text-white underline">
+                                {isCollapsed ? `View: ${comment.replies.length}` : "Unview"}
                             </button>
                         )}
                     </div>
@@ -110,7 +111,7 @@ export function CommentFunc({ comment, argumentId, onAddReply }: CommentFuncProp
                 )}
             </div>
 
-            {!isLook && comment.replies && comment.replies.length > 0 && (
+            {!isCollapsed && comment.replies && comment.replies.length > 0 && (
                 <div className="ml-4 pl-3 border-l-2 border-zinc-800 flex flex-col gap-2">
                     {comment.replies.map((reply) => (
                         <CommentFunc key={reply.id} comment={reply} argumentId={argumentId} onAddReply={onAddReply} />
