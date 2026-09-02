@@ -84,7 +84,7 @@ export default function Home() {
     const addReplyRecursive = (list: Comment[]): Comment[] => {
         return list.map(comment => {
             if (comment.id === targetId) {
-                return { ...comment, replies: [...(comment.replies || []), newComment] };
+                return { ...comment, replies: [newComment,...(comment.replies || [])] };
             }
             if (comment.replies && comment.replies.length > 0) {
                 return { ...comment, replies: addReplyRecursive(comment.replies) };

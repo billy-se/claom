@@ -61,8 +61,8 @@ export function CommentFunc({ comment, argumentId, onAddReply}: CommentFuncProps
                     <div className="mt-3 pt-3 border-t border-zinc-800 flex flex-col gap-2">
                         <textarea
                             value={replyText}
-                            onChange={(e) => setReplyText(e.target.value)}
-                            placeholder={`Replying to ${comment.author}...`} 
+                            onChange={(e) => {setReplyText(e.target.value); setIsCollapsed(false);}}
+                            placeholder={`Replying to ${comment.author}...`}
                             className="w-full bg-zinc-950 border border-zinc-800 p-2 rounded text-xs text-zinc-200 outline-none focus:border-zinc-600" 
                             rows={2}
                         />

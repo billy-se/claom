@@ -33,6 +33,6 @@ func ConnectDatabase() *sql.DB {
 		log.Fatalf("Failed to connect to the database: %v", err)
 	}
 
-	fmt.Println("Database connection established succesfully!")
+	log.Printf("Database connection established succesfully!")
 	return DB
 }

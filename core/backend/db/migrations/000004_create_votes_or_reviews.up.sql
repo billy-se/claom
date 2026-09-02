@@ -5,4 +5,4 @@ CREATE TABLE IF NOT EXISTS votes_or_reviews(
     vote_type INTEGER CHECK (vote_type IN (-1, 1)),
     review_content TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+);  
