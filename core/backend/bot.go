@@ -17,5 +17,5 @@ type ChatResponse struct {
 }
 
 func CallBotAgent(userArgument string) (string, error) {
-	return `{"score": 85, "review": "Mock review: Solid logic structure, but watch out for edge cases."}`, nil
+	return `{"score": 85}`, nil
 }

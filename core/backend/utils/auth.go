@@ -10,6 +10,9 @@ import (
 	"crypto/rand"
 	"crypto/cipher"
 	"encoding/hex"
+	"crypto/hmac"
+	"crypto/sha256"
+	"os"
 	
 
 	"golang.org/x/crypto/bcrypt"
@@ -43,7 +46,7 @@ func AesPy(email string) (string, error) {
 }
 
 func AesGo(email string) (string, error) {
-	key := []byte("0123456789abcdef")
+	key := []byte(os.Getenv("keyAesGo"))
 
 	block,err := aes.NewCipher(key)
 	if err != nil {
@@ -62,4 +65,10 @@ func AesGo(email string) (string, error) {
 
 	encrypted := gcm.Seal(nonce, nonce, []byte(email), nil)
 	return hex.EncodeToString(encrypted), nil
+}
+
+func GenerateBlindIndex(email string, hmacSecret []byte) string{
+	h := hmac.New(sha256.New, hmacSecret)
+	h.Write([]byte(email))
+	return hex.EncodeToString(h.Sum(nil))
 }

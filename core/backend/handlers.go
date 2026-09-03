@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 	"vaine-backend/utils"
+	"strings"
+	"os"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -362,6 +363,10 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
+
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	decryptEmail := utils.GenerateBlindIndex(email, []byte(os.Getenv("keyAesGo")))
+
 	if input.Email == "" || input.Password == "" {
 		http.Error(w, "Email and password are required", http.StatusBadRequest)
 		return
@@ -387,12 +392,11 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `INSERT INTO users (email, email_encrypted, password_hash) VALUES ($1, $2, $3) RETURNING id, created_at`
+	query := `INSERT INTO users (email, email_hash, password_hash) VALUES ($1, $2, $3) RETURNING id, created_at`
 	var id int
 	var createdAt time.Time
 
-	//change to securedEmail here
-	err = a.DB.QueryRow(query, input.Email, secureEmail, hashedPassword).Scan(&id, &createdAt)
+	err = a.DB.QueryRow(query, secureEmail, decryptEmail, hashedPassword).Scan(&id, &createdAt)
 	if err != nil {
 		log.Printf("Database insert errorrr: %v", err)
 		http.Error(w, "Email might already be taken", http.StatusBadRequest)
@@ -421,15 +425,21 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user User
-	query := "SELECT id, email, password_hash FROM users WHERE email = $1"
+	email := strings.ToLower(strings.TrimSpace(creds.Email))
+	decryptEmail := utils.GenerateBlindIndex(email, []byte(os.Getenv("keyAesGo")))
 
-	err = a.DB.QueryRow(query, creds.Email).Scan(&user.Id, &user.Email, &user.HashedPassword)
+	var user User
+	//WHERE email = 1$ (earlier)
+	query := "SELECT id, email, password_hash FROM users WHERE email_hash = $1"
+
+	//creds.Email
+	err = a.DB.QueryRow(query, decryptEmail).Scan(&user.Id, &user.Email, &user.HashedPassword)
 
 	if err == sql.ErrNoRows {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	} else if err != nil {
+		fmt.Println("DB Error: ", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

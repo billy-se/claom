@@ -1,7 +1,7 @@
 import sys
 from Crypto.Cipher import AES
 
-KEY = b'1234567890abcdef'
+KEY = os.getenv("keyAesPy").encode("utf-8")
 
 def encrypt_email(email):
     cipher = AES.new(KEY, AES.MODE_EAX)
