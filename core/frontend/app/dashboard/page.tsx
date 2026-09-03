@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Comment, Argument } from './types';
 import { ReviewModal } from './reviewModal';
 import { CreateArgumentModal } from './createModal';
@@ -18,6 +18,8 @@ export default function Home() {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [currentUsername, setCurrentUsername] = useState('GUESS');
 
+    const ws = useRef<WebSocket | null>(null);
+
     const mapComments = (commentsList: any[]): Comment[] => {
                 if (!commentsList) return [];
                 return commentsList.map((comment: any) => ({
@@ -33,9 +35,10 @@ export default function Home() {
     
         const token = localStorage.getItem('token');
         const user = localStorage.getItem('username');
+
         if (token){
             setIsLoggedIn(true);
-        }
+            }
         if(user){
             setCurrentUsername(user);
         }
@@ -59,8 +62,71 @@ export default function Home() {
                 console.error("Failed to fetch arguments:", err);
             };
         }
-        
         loadArguments();
+
+        ws.current = new WebSocket(`ws://localhost:2026/ws?token=${token}`)
+
+        ws.current.onopen = () => {
+        
+        }
+
+        ws.current.onmessage = (Event) => {
+            const data = JSON.parse(Event.data);
+
+            if (data.type === "NEW_ARGUMENT") {
+                const rawPayload = data.payload || data;
+                const newArg: Argument = {
+                    ...rawPayload,
+                    comments: mapComments(rawPayload.comments || [])
+                };
+
+                setArgumentsList(prev => {
+                    if (prev.some(arg => arg.id === newArg.id)) return prev;
+                    return [newArg, ...prev];
+                });
+            } else if (data.type === "NEW_COMMENT") {
+                const newComment: Comment = {
+                    id: String(data.payload.id),
+                    author: data.payload.author || "ANONYMOUS",
+                    content: data.payload.content,
+                    timestamp: data.payload.timestamp || 
+                        (data.payload.created_at ? data.payload.created_at.split('.')[0].replace('T', ' ') : "Just now"),
+                    replies: []
+                };
+
+                const argumentId = String(data.payload.argument_id);
+                const parentId = data.payload.parent_id;
+
+                const addReplyRecursive = (list: Comment[]): Comment[] => {
+                    return list.map(comment => {
+                        if (comment.id === String(parentId)) {
+                            if (comment.replies?.some(r => r.id === newComment.id)) return comment;
+                            return { ...comment, replies: [newComment, ...(comment.replies || [])] };
+                        }
+                        if (comment.replies && comment.replies.length > 0) {
+                            return { ...comment, replies: addReplyRecursive(comment.replies) };
+                        }
+                        return comment;
+                    });
+                };
+
+                setArgumentsList(prev => prev.map(arg => {
+                    if (String(arg.id) === argumentId) {
+                        const currentComments = arg.comments || [];
+                        if (parentId == null || parentId === undefined || parentId === "root-id") {
+                            if (currentComments.some(c => c.id === newComment.id)) return arg;
+                            return { ...arg, comments: [newComment, ...currentComments] };
+                        }
+                        return { ...arg, comments: addReplyRecursive(currentComments) };
+                    }
+                    return arg;
+                }));
+            }
+        };
+
+        return () => {
+            ws.current?.close(1000, 'User session ended');
+        }
 
     }, []);
 
@@ -81,86 +147,49 @@ export default function Home() {
 
     const handleAddReply = (targetId: string, savedComment: { id: number; content: string; created_at: string }) => {
     if (!activeThreadId) return;
-
-    const loggedInUser = localStorage.getItem('username') || currentUsername || "ANONYMOUS";
-
-    const newComment: Comment = {
-        id: String(savedComment.id),
-        author: loggedInUser,
-        content: savedComment.content,
-        timestamp: savedComment.created_at ? savedComment.created_at.split('.')[0].replace('T', ' ') : "Just now",
-        replies: []
-    };
-
-    const addReplyRecursive = (list: Comment[]): Comment[] => {
-        return list.map(comment => {
-            if (comment.id === targetId) {
-                return { ...comment, replies: [newComment,...(comment.replies || [])] };
-            }
-            if (comment.replies && comment.replies.length > 0) {
-                return { ...comment, replies: addReplyRecursive(comment.replies) };
-            }
-            return comment;
-        });
-    };
-
-    setArgumentsList(prevList => 
-        prevList.map(arg => {
-            if (arg.id === activeThreadId) {
-                const currentComments = arg.comments || [];
-                if (currentComments.length === 0 || targetId === "root-id") {
-                    return { ...arg, comments: [newComment, ...currentComments] };
-                }
-                return { ...arg, comments: addReplyRecursive(currentComments) };
-            }
-            return arg;
-        })
-    );
 };
 
     const handleCreateSubmit = async (e: React.SyntheticEvent) => {
-        e.preventDefault();
+    e.preventDefault();
 
-        const token = localStorage.getItem('token');
-        setError('');
+    const token = localStorage.getItem('token');
+    setError('');
 
-        try {
-            const res = await fetch('http://localhost:2026/api/arguments', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ title: newTitle, content: newContent}),
-            });
+    try {
+        const res = await fetch('http://localhost:2026/api/arguments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ title: newTitle, content: newContent }),
+        });
 
-            if (!res.ok) {
-                const errText = await res.text();
-                setError(errText);
-                return;
-            }
-
-            const data = await res.json();
-
-            const newArg: Argument = {
-                id: data.id,
-                author: currentUsername || "ANONYMOUS",
-                title: newTitle,
-                content: newContent,
-                logic_score: 0,
-                created_at: data.created_at,
-                comments: []
-            };
-
-            setArgumentsList([newArg, ...argumentsList]);
-            setNewTitle("");
-            setNewContent("");
-            setIsCreateOpen(false);
-
-        } catch (err: any) {
-            setError(err.message);
+        if (!res.ok) {
+            const errText = await res.text();
+            setError(errText);
+            return;
         }
+
+        const newArgument = await res.json();
+
+        setArgumentsList(prev => {
+            const formattedArg = {
+                ...newArgument,
+                comments: mapComments(newArgument.comments || [])
+            };
+            if (prev.some(arg => arg.id === formattedArg.id)) return prev;
+            return [formattedArg, ...prev];
+        });
+
+        setNewTitle("");
+        setNewContent("");
+        setIsCreateOpen(false);
+
+    } catch (err: any) {
+        setError(err.message);
     }
+};
     
     return (
         <main className="min-h-screen bg-black text-zinc-100 font-mono p-6 md:p-12 flex justify-center">

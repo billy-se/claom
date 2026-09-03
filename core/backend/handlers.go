@@ -12,8 +12,10 @@ import (
 	"strings"
 	"os"
 	"math/rand"
+	"sync"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/coder/websocket"
 )
 
 type contextKey string
@@ -157,7 +159,7 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Failed to fetch username for user %d: %v", userID, err)
 		http.Error(w, "user profile error", http.StatusInternalServerError)
-		return														
+		return
 	}
 
 	botResponseText, err := CallBotAgent(input.Content)
@@ -178,9 +180,9 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-        INSERT INTO arguments (title, content, user_id, logic_score, author) 
-        VALUES ($1, $2, $3, $4, $5) 
-        RETURNING id, logic_score, created_at`
+		INSERT INTO arguments (title, content, user_id, logic_score, author) 
+		VALUES ($1, $2, $3, $4, $5) 
+		RETURNING id, logic_score, created_at`
 
 	var id int
 	var logicScore int
@@ -193,23 +195,55 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var botCommentID int
+	var botCommentCreatedAt string
 	if reviewContent != "" {
-		commentQuery := `INSERT INTO comments (argument_id, user_id, content) VALUES ($1, NULL, $2)`
-		_, commentErr := a.DB.Exec(commentQuery, id, reviewContent)
-		if commentErr != nil {
-			log.Printf("Failed to save bot review comment: %v", commentErr)
+		commentQuery := `INSERT INTO comments (argument_id, user_id, author, content) VALUES ($1, NULL, $2, $3) RETURNING id, created_at`
+		err = a.DB.QueryRow(commentQuery, id, "AI Auditor", reviewContent).Scan(&botCommentID, &botCommentCreatedAt)
+		if err != nil {
+			log.Printf("Failed to save bot review comment: %v", err)
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+
+	var initialComments []interface{}
+	if reviewContent != "" {
+		initialComments = []interface{}{
+			map[string]interface{}{
+				"id":        fmt.Sprintf("%d", botCommentID),
+				"author":    "AI Auditor",
+				"content":   reviewContent,
+				"timestamp": botCommentCreatedAt,
+				"replies":   []interface{}{},
+			},
+		}
+	}
+
+	newArg := map[string]interface{}{
+		"id":          id,
+		"author":      username,
+		"title":       input.Title,
+		"content":     input.Content,
+		"logic_score": logicScore,
+		"created_at":  createdAt,
+		"comments":    initialComments,
+	}
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message":     "Saved",
 		"id":          id,
 		"logic_score": logicScore,
-		"author": username,
+		"author":      username,
 		"created_at":  createdAt,
 	})
+
+	msg, _ := json.Marshal(map[string]interface{}{
+		"type":    "NEW_ARGUMENT",
+		"payload": newArg,
+	})
+	a.hub.broadcast <- msg
 }
 
 /*botResponse, err := CallBotAgent(input.Content)
@@ -558,12 +592,28 @@ func (a *App) handleCreateComment(w http.ResponseWriter, r *http.Request) {
 
 	formattedTime := createdAt.Format("2006-01-02 15:04:05")
 
+	newComment := map[string]interface{}{
+		"id":          fmt.Sprintf("%d", id),
+		"argument_id": input.ArgumentID,
+		"parent_id":   input.ParentID,
+		"content":     input.Content,
+		"author":      author,
+		"timestamp":   formattedTime,
+		"replies":     []interface{}{},
+	}
+
+	msg, _ := json.Marshal(map[string]interface{}{
+		"type":    "NEW_COMMENT",
+		"payload": newComment,
+	})
+	a.hub.broadcast <- msg
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message":    "Comment saved",
 		"id":         id,
 		"created_at": formattedTime,
-		"author": author,
+		"author":     author,
 	})
 }
 
@@ -581,4 +631,106 @@ func EnableCORS(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+type Client struct{
+	connection *websocket.Conn
+	send chan []byte
+}
+
+type Hub struct {
+	clients    map[*Client]bool
+	broadcast  chan []byte
+	register   chan *Client
+	unregister chan *Client
+	mu         sync.Mutex
+}
+
+func NewHub() *Hub {
+	return &Hub{
+		clients:    make(map[*Client]bool),
+		broadcast:  make(chan []byte),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+	}
+}
+
+func (a *App) WebSocketHandler(w http.ResponseWriter, r *http.Request){
+	token := r.URL.Query().Get("token")
+
+	if token == ""{
+		http.Error(w, "Unaothorized", http.StatusUnauthorized)
+		return
+	}
+
+	connection, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"*"},
+	})
+	if err != nil {
+		log.Println("Failed to upgrade connection", err)
+		return
+	}
+
+	defer connection.Close(websocket.StatusNormalClosure, "Session ended")
+
+	client := &Client{
+		connection: connection,
+		send: make(chan []byte, 256),
+	}
+
+	a.hub.register <- client
+	defer func(){
+		a.hub.unregister <- client
+	}()
+
+	//log.Println("Client successfully connected!")
+
+	ctx := context.Background()
+
+	go func(){
+		for message := range client.send {
+			err := connection.Write(ctx, websocket.MessageText, message)
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	for {
+		_, _, err := connection.Read(ctx)
+		if err != nil {
+			log.Println("Client disconnected", err)
+			break
+		}
+
+	}
+}
+
+func (h *Hub) Run() {
+	for {
+		select {
+		case client := <-h.register:
+			h.mu.Lock()
+			h.clients[client] = true
+			h.mu.Unlock()
+		case client := <-h.unregister:
+			h.mu.Lock()
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
+			}
+			h.mu.Unlock()
+		case message := <-h.broadcast:
+			h.mu.Lock()
+			for client := range h.clients {
+				select {
+				case client.send <- message:
+				default:
+					close(client.send)
+					delete(h.clients, client)
+				}
+			}
+			h.mu.Unlock()
+		}
+	}
 }

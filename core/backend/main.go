@@ -87,6 +87,7 @@ import (
 
 type App struct {
 	DB *sql.DB
+	hub *Hub
 }
 
 func main() {
@@ -97,7 +98,10 @@ func main() {
 
 	dbConnect := config.ConnectDatabase()
 
-	app := &App{DB: dbConnect}
+	hub := NewHub()
+	go hub.Run()
+
+	app := &App{DB: dbConnect, hub: hub,}
 
 	db.RunMigrations(dbConnect)
 
@@ -114,6 +118,7 @@ func main() {
 	mux.HandleFunc("POST /api/arguments", app.authMiddleware(app.handleCreateArgument))
 	mux.HandleFunc("GET /api/arguments", app.handleGetArguments)
 	mux.HandleFunc("POST /api/comments", app.authMiddleware(app.handleCreateComment))
+	mux.HandleFunc("/ws", app.WebSocketHandler)
 
 	//mux.HandleFunc("POST /api/arguments", app.handleCreateArgument)
 	//mux.HandleFunc("POST /api/jwt", app.handleJWT)
