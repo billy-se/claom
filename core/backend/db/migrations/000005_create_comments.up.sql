@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS comments(
     id BIGSERIAL PRIMARY KEY,
+    author VARCHAR(50) NOT NULL,
     argument_id BIGINT REFERENCES arguments(id) ON DELETE CASCADE,
     parent_id BIGINT REFERENCES comments(id) ON DELETE CASCADE,
     user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,

@@ -11,6 +11,7 @@ import (
 	"vaine-backend/utils"
 	"strings"
 	"os"
+	"math/rand"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -85,6 +86,7 @@ func generateJWT(userID int) string {
 type ArgumentInput struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
+	Author string `json:"author"`
 }
 
 type RegisterInput struct {
@@ -150,6 +152,14 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var username string
+	err := a.DB.QueryRow("SELECT username from users WHERE id = $1", userID).Scan(&username)
+	if err != nil {
+		log.Printf("Failed to fetch username for user %d: %v", userID, err)
+		http.Error(w, "user profile error", http.StatusInternalServerError)
+		return														
+	}
+
 	botResponseText, err := CallBotAgent(input.Content)
 	var score int = 50
 	var reviewContent = "Automated security audit failed to generate review."
@@ -168,15 +178,15 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-        INSERT INTO arguments (title, content, user_id, logic_score) 
-        VALUES ($1, $2, $3, $4) 
+        INSERT INTO arguments (title, content, user_id, logic_score, author) 
+        VALUES ($1, $2, $3, $4, $5) 
         RETURNING id, logic_score, created_at`
 
 	var id int
 	var logicScore int
 	var createdAt string
 
-	err = a.DB.QueryRow(query, input.Title, input.Content, userID, score).Scan(&id, &logicScore, &createdAt)
+	err = a.DB.QueryRow(query, input.Title, input.Content, userID, score, username).Scan(&id, &logicScore, &createdAt)
 	if err != nil {
 		log.Printf("Database insert error: %v", err)
 		http.Error(w, "Failed to save argument", http.StatusInternalServerError)
@@ -197,6 +207,7 @@ func (a *App) handleCreateArgument(w http.ResponseWriter, r *http.Request) {
 		"message":     "Saved",
 		"id":          id,
 		"logic_score": logicScore,
+		"author": username,
 		"created_at":  createdAt,
 	})
 }
@@ -220,7 +231,7 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-        SELECT id, user_id, title, content, logic_score, created_at 
+        SELECT id, user_id, title, content, logic_score, author, created_at 
         FROM arguments 
         ORDER BY created_at DESC
     `
@@ -236,15 +247,24 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var arg ArgumentResponse
-		var rawUserID int
-		if err := rows.Scan(&arg.ID, &rawUserID, &arg.Title, &arg.Content, &arg.LogicScore, &arg.CreatedAt); err != nil {
+		var rawUserID sql.NullInt32
+		var authorNull sql.NullString
+
+		if err := rows.Scan(&arg.ID, &rawUserID, &arg.Title, &arg.Content, &arg.LogicScore, &authorNull, &arg.CreatedAt); err != nil {
+			log.Printf("Scan error on argument row: %v", err)
 			continue
 		}
 
-		arg.Author = fmt.Sprintf("ANONYMOUS_DEV_%d", (rawUserID*31)%900+100)
+		if authorNull.Valid && authorNull.String != "" {
+			arg.Author = authorNull.String
+		}else{
+			arg.Author = "ANONYMOUS_DEV"
+		}
+
+		//arg.Author = fmt.Sprintf("ANONYMOUS_DEV_%d", (rawUserID*31)%900+100)
 
 		commentQuery := `
-            SELECT id, user_id, parent_id, content, created_at 
+            SELECT id, user_id, parent_id, content, author, created_at 
             FROM comments 
             WHERE argument_id = $1 
             ORDER BY created_at ASC
@@ -262,9 +282,10 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 			var cUserID sql.NullInt32
 			var parentID sql.NullInt64
 			var content string
-			var createdAt string
+			var authorNull sql.NullString
+			var createdAt time.Time
 
-			if err := commentRows.Scan(&cID, &cUserID, &parentID, &content, &createdAt); err == nil {
+			if err := commentRows.Scan(&cID, &cUserID, &parentID, &content, &authorNull, &createdAt); err == nil {
 				var pID *int64
 				if parentID.Valid {
 					val := parentID.Int64
@@ -273,17 +294,19 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 
 				var authorStr string
 				if cUserID.Valid {
-					authorStr = fmt.Sprintf("ANONYMOUS_DEV_%d", (int(cUserID.Int32)*31)%900+100)
+					authorStr = authorNull.String
 				} else {
 					authorStr = "BOT_REVIEWER"
 				}
+
+				formattedTime := createdAt.Format("2006-01-02 15:04:05")
 
 				flatComments = append(flatComments, CommentInput{
 					ID:        fmt.Sprintf("%d", cID),
 					ParentID:  pID,
 					Author:    authorStr,
-					Text:      content,
-					Timestamp: createdAt,
+					Content:   content,
+					Timestamp: formattedTime,
 					Replies:   []*CommentInput{},
 				})
 			} else {
@@ -345,6 +368,19 @@ func (a *App) handleGetArguments(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(arguments)
 }
 
+var w1 = []string{"Mine", "Spare", "South", "Hum", "Rode"}
+var w2 = []string{"Peak", "Jar", "Ink", "Leap", "Up"}
+
+func generateNames() string{
+	random := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	wo1 := w1[random.Intn(len(w1))]
+	wo2 := w2[random.Intn(len(w2))]
+	randomNum := random.Intn(900) + 100			
+	
+	return fmt.Sprintf("%s%s%d", wo1, wo2, randomNum)
+}
+
 func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "OPTIONS" {
@@ -364,13 +400,13 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := strings.ToLower(strings.TrimSpace(input.Email))
-	decryptEmail := utils.GenerateBlindIndex(email, []byte(os.Getenv("keyAesGo")))
-
 	if input.Email == "" || input.Password == "" {
 		http.Error(w, "Email and password are required", http.StatusBadRequest)
 		return
 	}
+
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	decryptEmail := utils.GenerateBlindIndex(email, []byte(os.Getenv("keyAesGo")))
 
 	/*securedEmail, err := utils.AesPy(input.Email)
 	if err != nil {
@@ -391,12 +427,15 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+	
+	name := generateNames()
+	fmt.Println("DEBUG: Generate ->", name)
 
-	query := `INSERT INTO users (email, email_hash, password_hash) VALUES ($1, $2, $3) RETURNING id, created_at`
+	query := `INSERT INTO users (email, email_hash, password_hash, username) VALUES ($1, $2, $3, $4) RETURNING id, created_at`
 	var id int
 	var createdAt time.Time
 
-	err = a.DB.QueryRow(query, secureEmail, decryptEmail, hashedPassword).Scan(&id, &createdAt)
+	err = a.DB.QueryRow(query, secureEmail, decryptEmail, hashedPassword, name).Scan(&id, &createdAt)
 	if err != nil {
 		log.Printf("Database insert errorrr: %v", err)
 		http.Error(w, "Email might already be taken", http.StatusBadRequest)
@@ -428,12 +467,14 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	email := strings.ToLower(strings.TrimSpace(creds.Email))
 	decryptEmail := utils.GenerateBlindIndex(email, []byte(os.Getenv("keyAesGo")))
 
+	var username string
 	var user User
 	//WHERE email = 1$ (earlier)
-	query := "SELECT id, email, password_hash FROM users WHERE email_hash = $1"
+	query := "SELECT id, email, password_hash, username FROM users WHERE email_hash = $1"
+
 
 	//creds.Email
-	err = a.DB.QueryRow(query, decryptEmail).Scan(&user.Id, &user.Email, &user.HashedPassword)
+	err = a.DB.QueryRow(query, decryptEmail).Scan(&user.Id, &user.Email, &user.HashedPassword, &username)
 
 	if err == sql.ErrNoRows {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
@@ -461,6 +502,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Login successful!",
 		"token":   tokenString,
+		"username": username,
 	})
 }
 
@@ -470,7 +512,6 @@ type CommentInput struct {
 	ParentID   *int64          `json:"parent_id,omitempty"`
 	Content    string          `json:"content,omitempty"`
 	Author     string          `json:"author,omitempty"`
-	Text       string          `json:"text,omitempty"`
 	Timestamp  string          `json:"timestamp,omitempty"`
 	Replies    []*CommentInput `json:"replies,omitempty"`
 }
@@ -493,26 +534,36 @@ func (a *App) handleCreateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var author string
+	err := a.DB.QueryRow("SELECT username FROM users WHERE id = $1", userID).Scan(&author)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusInternalServerError)
+		return
+	}
+
 	query := `
-        INSERT INTO comments (argument_id, parent_id, user_id, content)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO comments (argument_id, parent_id, user_id, content, author)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at`
 
 	var id int64
-	var createdAt string
+	var createdAt time.Time
 
-	err := a.DB.QueryRow(query, input.ArgumentID, input.ParentID, userID, input.Content).Scan(&id, &createdAt)
+	err = a.DB.QueryRow(query, input.ArgumentID, input.ParentID, userID, input.Content, author).Scan(&id, &createdAt)
 	if err != nil {
 		log.Printf("Database insert error: %v", err)
 		http.Error(w, "Failed to save comment", http.StatusInternalServerError)
 		return
 	}
 
+	formattedTime := createdAt.Format("2006-01-02 15:04:05")
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message":    "Comment saved",
 		"id":         id,
-		"created_at": createdAt,
+		"created_at": formattedTime,
+		"author": author,
 	})
 }
 

@@ -16,10 +16,11 @@ export function CommentFunc({ comment, argumentId, onAddReply}: CommentFuncProps
 
     useEffect(() => {
         const token = localStorage.getItem('token');
+        const user = localStorage.getItem('username');
         if (token) setIsLoggedIn(true);
     }, []);
 
-    const isLongText = comment.text.length > 150;
+    const isLongText = comment.content.length > 150;
     const [isExpandedLong, setIsExpandedLong] = useState(false);
 
     return (
@@ -39,7 +40,7 @@ export function CommentFunc({ comment, argumentId, onAddReply}: CommentFuncProps
                 </div>
 
                 <p className="text-zinc-300 leading-relaxed break-words whitespace-pre-wrap min-w-0">
-                    {isLongText && !isExpandedLong ? `${comment.text.substring(0, 150)}...` : comment.text}
+                    {isLongText && !isExpandedLong ? `${comment.content.substring(0, 150)}...` : comment.content}
                 </p>
 
                 {isLongText && (

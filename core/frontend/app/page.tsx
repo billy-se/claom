@@ -119,6 +119,7 @@ export default function AuthPage() {
       const data = await res.json();
 
       localStorage.setItem('token', data.token);
+      localStorage.setItem('username', data.username);
 
       setLoginMessage('Login Successful');
       router.push('/dashboard');

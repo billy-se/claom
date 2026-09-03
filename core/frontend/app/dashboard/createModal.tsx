@@ -3,10 +3,8 @@ import React from 'react';
 interface CreateArgumentModalProps {
     isCreateOpen: boolean;
     error: string;
-    newAuthor: string;
     newTitle: string;
     newContent: string;
-    setNewAuthor: (val: string) => void;
     setNewTitle: (val: string) => void;
     setNewContent: (val: string) => void;
     setIsCreateOpen: (val: boolean) => void;
@@ -16,10 +14,8 @@ interface CreateArgumentModalProps {
 export function CreateArgumentModal({
     isCreateOpen,
     error,
-    newAuthor,
     newTitle,
     newContent,
-    setNewAuthor,
     setNewTitle,
     setNewContent,
     setIsCreateOpen,
@@ -38,17 +34,6 @@ export function CreateArgumentModal({
                 {error && <p className="text-red-400 text-xs">{error}</p>}
 
                 <form onSubmit={onSubmit} className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-zinc-400 uppercase">Author Handle</label>
-                        <input 
-                            type="text" 
-                            value={newAuthor} 
-                            onChange={(e) => setNewAuthor(e.target.value)}
-                            placeholder="e.g. ANONYMOUS_DEV (OPTIONAL)" 
-                            className="bg-zinc-950 border border-zinc-800 p-2 rounded text-xs text-zinc-200 outline-none focus:border-zinc-600"
-                        />
-                    </div>
-
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] text-zinc-400 uppercase">Argument Title</label>
                         <input 

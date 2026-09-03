@@ -13,19 +13,18 @@ export default function Home() {
 
     const [newTitle, setNewTitle] = useState("");
     const [newContent, setNewContent] = useState("");
-    const [newAuthor, setNewAuthor] = useState("");
 
     const [error, setError] = useState('');
     const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [currentUsername, setCurrentUsername] = useState('');
+    const [currentUsername, setCurrentUsername] = useState('GUESS');
 
     const mapComments = (commentsList: any[]): Comment[] => {
                 if (!commentsList) return [];
                 return commentsList.map((comment: any) => ({
                     id: String(comment.id),
                     author: comment.author || "ANONYMOUS",
-                    text: comment.text,
-                    timestamp: comment.created_at ? comment.created_at.split('.')[0].replace('T', ' ') : "Just now",
+                    content: comment.content,
+                    timestamp: comment.timestamp,
                     replies: mapComments(comment.replies || comment.comments || [])
                 })).reverse();
             };
@@ -33,7 +32,7 @@ export default function Home() {
     useEffect(() => {
     
         const token = localStorage.getItem('token');
-        const user = localStorage.getItem('user');
+        const user = localStorage.getItem('username');
         if (token){
             setIsLoggedIn(true);
         }
@@ -83,10 +82,12 @@ export default function Home() {
     const handleAddReply = (targetId: string, savedComment: { id: number; content: string; created_at: string }) => {
     if (!activeThreadId) return;
 
+    const loggedInUser = localStorage.getItem('username') || currentUsername || "ANONYMOUS";
+
     const newComment: Comment = {
         id: String(savedComment.id),
-        author: "YOU",
-        text: savedComment.content,
+        author: loggedInUser,
+        content: savedComment.content,
         timestamp: savedComment.created_at ? savedComment.created_at.split('.')[0].replace('T', ' ') : "Just now",
         replies: []
     };
@@ -130,7 +131,7 @@ export default function Home() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ title: newTitle, content: newContent }),
+                body: JSON.stringify({ title: newTitle, content: newContent}),
             });
 
             if (!res.ok) {
@@ -143,18 +144,17 @@ export default function Home() {
 
             const newArg: Argument = {
                 id: data.id,
-                author: newAuthor || "ANONYMOUS",
+                author: currentUsername || "ANONYMOUS",
                 title: newTitle,
                 content: newContent,
                 logic_score: 0,
-                created_at: "Just now",
+                created_at: data.created_at,
                 comments: []
             };
 
             setArgumentsList([newArg, ...argumentsList]);
             setNewTitle("");
             setNewContent("");
-            setNewAuthor("");
             setIsCreateOpen(false);
 
         } catch (err: any) {
@@ -250,7 +250,7 @@ export default function Home() {
 
                         <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-5 flex flex-col gap-3">
                             <h2 className="text-xs font-bold tracking-wider uppercase text-zinc-200">
-                                [ MERIT METRICS ]
+                                Stats:
                             </h2>
                             <div className="flex flex-col gap-2 text-xs text-zinc-400">
                                 <div className="flex justify-between">
@@ -282,10 +282,8 @@ export default function Home() {
                 <CreateArgumentModal
                     isCreateOpen={isCreateOpen}
                     error={error}
-                    newAuthor={newAuthor}
                     newTitle={newTitle}
                     newContent={newContent}
-                    setNewAuthor={setNewAuthor}
                     setNewTitle={setNewTitle}
                     setNewContent={setNewContent}
                     setIsCreateOpen={setIsCreateOpen}
