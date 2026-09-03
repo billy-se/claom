@@ -5,12 +5,6 @@ import { Comment, Argument } from './types';
 import { ReviewModal } from './reviewModal';
 import { CreateArgumentModal } from './createModal';
 
-export function handleViewerModeClick(setIsLoggedIn: (value: boolean) => void, setIsCreateOpen: (value: boolean) => void){
-    localStorage.removeItem('token');
-    setIsLoggedIn(false);
-    setIsCreateOpen(false);
-}
-
 export default function Home() {
     const [isOpen, setIsOpen] = useState(false);
     const [activeThreadId, setActiveThreadId] = useState<null | number>(null);
@@ -23,52 +17,68 @@ export default function Home() {
 
     const [error, setError] = useState('');
     const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [currentUsername, setCurrentUsername] = useState('');
+
+    const mapComments = (commentsList: any[]): Comment[] => {
+                if (!commentsList) return [];
+                return commentsList.map((comment: any) => ({
+                    id: String(comment.id),
+                    author: comment.author || "ANONYMOUS",
+                    text: comment.text,
+                    timestamp: comment.created_at ? comment.created_at.split('.')[0].replace('T', ' ') : "Just now",
+                    replies: mapComments(comment.replies || comment.comments || [])
+                })).reverse();
+            };
 
     useEffect(() => {
     
         const token = localStorage.getItem('token');
+        const user = localStorage.getItem('user');
         if (token){
             setIsLoggedIn(true);
         }
+        if(user){
+            setCurrentUsername(user);
+        }
 
-        fetch('http://localhost:2026/api/arguments')
-        .then((res) => res.json())
-        .then((data) => {
-            const mapComments = (commentsList: any[]): Comment[] => {
-                if (!commentsList) return [];
-                return commentsList.map((c: any) => ({
-                    id: String(c.id),
-                    author: c.author || "ANONYMOUS",
-                    text: c.text || c.content,
-                    timestamp: c.created_at || "Just now",
-                    replies: mapComments(c.replies || c.comments || [])
-                })).reverse();
+        const loadArguments = async () => {
+            try{
+                const res = await fetch('http://localhost:2026/api/arguments');
+                if(!res.ok){
+                    throw new Error('Failed to fetch arguments');
+                }
+
+                const data = await res.json();
+
+                const initializedData = data.map((arg: Argument) => ({
+                    ...arg,
+                    comments: mapComments(arg.comments || [])
+                }));
+
+                setArgumentsList(initializedData);
+            }catch(err){
+                console.error("Failed to fetch arguments:", err);
             };
+        }
+        
+        loadArguments();
 
-    const initializedData = data.map((arg: Argument) => ({ 
-        ...arg, 
-        comments: mapComments(arg.comments || []) 
-    }));
-    
-    setArgumentsList(initializedData);
-})
-.catch((err) => console.error("Failed to fetch arguments:", err));
     }, []);
+
 
     const activeArguments = (argumentsList || []).find((arg) => arg.id === activeThreadId) ?? null;
 
+    
     const handleAddComment = (commentData: Comment) => {
-    if (!activeThreadId) return;
+        if(!activeThreadId) return;
 
-    setArgumentsList(prevList => 
-        prevList.map(arg => {
-            if (arg.id === activeThreadId) {
-                return { ...arg, comments: [commentData, ...(arg.comments || [])] };
+        setArgumentsList(previousList => previousList.map(arg => {
+            if (arg.id === activeThreadId){
+                return {...arg, comments: [commentData, ...(arg.comments || [])]};
             }
             return arg;
-        })
-    );
-};
+        }))
+    };
 
     const handleAddReply = (targetId: string, savedComment: { id: number; content: string; created_at: string }) => {
     if (!activeThreadId) return;
@@ -77,7 +87,7 @@ export default function Home() {
         id: String(savedComment.id),
         author: "YOU",
         text: savedComment.content,
-        timestamp: savedComment.created_at || "Just now",
+        timestamp: savedComment.created_at ? savedComment.created_at.split('.')[0].replace('T', ' ') : "Just now",
         replies: []
     };
 
@@ -161,7 +171,7 @@ export default function Home() {
                         
                         <div>
                             <h1 className="text-sm font-semibold tracking-widest uppercase text-zinc-200">
-                                {activeArguments?.author || "SYSTEM_ROOT"}
+                                {currentUsername}
                             </h1>
                             <p className="text-[10px] text-zinc-500">Username</p>
                         </div>

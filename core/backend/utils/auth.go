@@ -5,6 +5,12 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"crypto/aes"
+	"io"
+	"crypto/rand"
+	"crypto/cipher"
+	"encoding/hex"
+	
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -19,7 +25,7 @@ func CheckPassword(password, hash string) bool {
 	return err == nil
 }
 
-func Aes(email string) (string, error) {
+func AesPy(email string) (string, error) {
 	cmd := exec.Command("python", "utils/aes.py", email)
 
 	var out bytes.Buffer
@@ -34,4 +40,26 @@ func Aes(email string) (string, error) {
 
 	encryptedResult := strings.TrimSpace(out.String())
 	return encryptedResult, nil
+}
+
+func AesGo(email string) (string, error) {
+	key := []byte("0123456789abcdef")
+
+	block,err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _,err := io.ReadFull(rand.Reader, nonce); err != nil{
+		return "", err
+	}
+
+	encrypted := gcm.Seal(nonce, nonce, []byte(email), nil)
+	return hex.EncodeToString(encrypted), nil
 }

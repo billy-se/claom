@@ -367,7 +367,13 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	securedEmail, err := utils.Aes(input.Email)
+	/*securedEmail, err := utils.AesPy(input.Email)
+	if err != nil {
+		log.Printf("Email AES error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}*/
+	secureEmail, err := utils.AesGo(input.Email)
 	if err != nil {
 		log.Printf("Email AES error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -385,7 +391,8 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var id int
 	var createdAt time.Time
 
-	err = a.DB.QueryRow(query, input.Email, securedEmail, hashedPassword).Scan(&id, &createdAt)
+	//change to securedEmail here
+	err = a.DB.QueryRow(query, input.Email, secureEmail, hashedPassword).Scan(&id, &createdAt)
 	if err != nil {
 		log.Printf("Database insert errorrr: %v", err)
 		http.Error(w, "Email might already be taken", http.StatusBadRequest)

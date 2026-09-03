@@ -38,7 +38,7 @@ export function CommentFunc({ comment, argumentId, onAddReply}: CommentFuncProps
                     </div>
                 </div>
 
-                <p className="text-zinc-300 leading-relaxed">
+                <p className="text-zinc-300 leading-relaxed break-words whitespace-pre-wrap min-w-0">
                     {isLongText && !isExpandedLong ? `${comment.text.substring(0, 150)}...` : comment.text}
                 </p>
 
